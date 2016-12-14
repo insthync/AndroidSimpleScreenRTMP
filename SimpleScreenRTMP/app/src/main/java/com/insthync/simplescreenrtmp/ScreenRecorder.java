@@ -5,7 +5,6 @@ import android.hardware.display.VirtualDisplay;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
-import android.media.MediaMuxer;
 import android.media.projection.MediaProjection;
 import android.util.Log;
 import android.view.Surface;
@@ -29,15 +28,15 @@ public class ScreenRecorder extends Thread {
     private static final int FRAME_RATE = 30; // 30 fps
     private static final int IFRAME_INTERVAL = 10; // 10 seconds between I-frames
     private static final int TIMEOUT_US = 10000;
-    // RTMP Constraints
-    private static final String RMTP_URL = "rtmp://192.168.1.45/live/bay";
+    // RTMP_URL Constraints
+    private static final String RTMP_URL = "rtmp://192.168.1.45/live/bay";
 
     private MediaCodec mEncoder;
     private Surface mSurface;
     private AtomicBoolean mQuit = new AtomicBoolean(false);
     private MediaCodec.BufferInfo mBufferInfo = new MediaCodec.BufferInfo();
     private VirtualDisplay mVirtualDisplay;
-    // RTMP
+    // RTMP_URL
     private RTMPMuxer mRTMPMuxer;
 
     public ScreenRecorder(int width, int height, int bitrate, int dpi, MediaProjection mp) {
@@ -72,8 +71,8 @@ public class ScreenRecorder extends Thread {
             }
 
             mRTMPMuxer = new RTMPMuxer();
-            int result = mRTMPMuxer.open(RMTP_URL, mWidth, mHeight);
-            Log.d(TAG, "RTMP open result: " + result);
+            int result = mRTMPMuxer.open(RTMP_URL, mWidth, mHeight);
+            Log.d(TAG, "RTMP_URL open result: " + result);
 
             mVirtualDisplay = mMediaProjection.createVirtualDisplay(TAG + "-display",
                     mWidth, mHeight, mDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC,
@@ -134,10 +133,15 @@ public class ScreenRecorder extends Thread {
             encodedData.get(bytes);
 
             int rtmpConnectionState = mRTMPMuxer != null ? mRTMPMuxer.isConnected() : 0;
-            Log.d(TAG, "RTMP connection state: " + rtmpConnectionState);
+            int timestamp = (int)(System.currentTimeMillis() / 1000);
+            Log.d(TAG, "RTMP_URL connection state: " + rtmpConnectionState + " timestamp: " + timestamp + " byte[] length: " + bytes.length);
             if (rtmpConnectionState != 0) {
-                int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, (int)System.currentTimeMillis());
-                Log.d(TAG, "RTMP write result: " + writeResult);
+                int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, (int)timestamp);
+                Log.d(TAG, "RTMP_URL write result: " + writeResult);
+            }
+            else
+            {
+                mRTMPMuxer.open(RTMP_URL, mWidth, mHeight);
             }
         }
     }
@@ -145,8 +149,7 @@ public class ScreenRecorder extends Thread {
     private void prepareEncoder() throws IOException {
 
         MediaFormat format = MediaFormat.createVideoFormat(MIME_TYPE, mWidth, mHeight);
-        format.setInteger(MediaFormat.KEY_COLOR_FORMAT,
-                MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         format.setInteger(MediaFormat.KEY_BIT_RATE, mBitRate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
         format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, IFRAME_INTERVAL);
@@ -160,12 +163,10 @@ public class ScreenRecorder extends Thread {
     }
 
     private void release() {
-        /*
         if (mRTMPMuxer != null) {
             mRTMPMuxer.close();
             mRTMPMuxer = null;
         }
-        */
         if (mEncoder != null) {
             mEncoder.stop();
             mEncoder.release();
