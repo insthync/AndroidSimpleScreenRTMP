@@ -125,7 +125,7 @@ public class ScreenRecorder extends Thread {
                     + ", offset=" + mBufferInfo.offset);
         }
         if (encodedData != null) {
-            encodedData.position(mBufferInfo.offset);
+            encodedData.position(mBufferInfo.offset + 4);
             encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
             Log.i(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
 

@@ -34,8 +34,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
             return;
         }
         // video size
-        final int width = 1280;
-        final int height = 720;
+        final int width = 640;
+        final int height = 480;
         final int bitrate = 6000000;
         mRecorder = new ScreenRecorder(width, height, bitrate, 1, mediaProjection);
         mRecorder.start();
