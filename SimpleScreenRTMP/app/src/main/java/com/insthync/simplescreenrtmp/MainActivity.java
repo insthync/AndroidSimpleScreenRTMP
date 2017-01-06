@@ -41,7 +41,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         mRecorder.start();
         mButton.setText("Stop Recorder");
         Toast.makeText(this, "Screen recorder is running...", Toast.LENGTH_SHORT).show();
-        moveTaskToBack(true);
+        //moveTaskToBack(true);
     }
 
     @Override

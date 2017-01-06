@@ -25,11 +25,11 @@ public class ScreenRecorder extends Thread {
     private MediaProjection mMediaProjection;
     // parameters for the encoder
     private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
-    private static final int FRAME_RATE = 30; // 30 fps
+    private static final int FRAME_RATE = 15; // 15 fps
     private static final int IFRAME_INTERVAL = 10; // 10 seconds between I-frames
-    private static final int TIMEOUT_US = 10000;
+    private static final int TIMEOUT_US = 1000000000;
     // RTMP_URL Constraints
-    private static final String RTMP_URL = "rtmp://192.168.1.45/live/bay";
+    private static final String RTMP_URL = "rtmp://192.168.1.45/live/test";
 
     private MediaCodec mEncoder;
     private Surface mSurface;
@@ -38,6 +38,7 @@ public class ScreenRecorder extends Thread {
     private VirtualDisplay mVirtualDisplay;
     // RTMP_URL
     private RTMPMuxer mRTMPMuxer;
+    private long startTime;
 
     public ScreenRecorder(int width, int height, int bitrate, int dpi, MediaProjection mp) {
         super(TAG);
@@ -64,6 +65,7 @@ public class ScreenRecorder extends Thread {
     @Override
     public void run() {
         try {
+            startTime = 0;
             try {
                 prepareEncoder();
             } catch (IOException e) {
@@ -125,7 +127,7 @@ public class ScreenRecorder extends Thread {
                     + ", offset=" + mBufferInfo.offset);
         }
         if (encodedData != null) {
-            encodedData.position(mBufferInfo.offset + 4);
+            encodedData.position(mBufferInfo.offset);
             encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
             Log.i(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
 
@@ -133,10 +135,14 @@ public class ScreenRecorder extends Thread {
             encodedData.get(bytes);
 
             int rtmpConnectionState = mRTMPMuxer != null ? mRTMPMuxer.isConnected() : 0;
-            int timestamp = (int)(System.currentTimeMillis() / 1000);
+
+            if (startTime == 0)
+                startTime = mBufferInfo.presentationTimeUs / 1000;
+
+            int timestamp = (int)((mBufferInfo.presentationTimeUs / 1000) - startTime);
             Log.d(TAG, "RTMP_URL connection state: " + rtmpConnectionState + " timestamp: " + timestamp + " byte[] length: " + bytes.length);
             if (rtmpConnectionState != 0) {
-                int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, (int)timestamp);
+                int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, timestamp);
                 Log.d(TAG, "RTMP_URL write result: " + writeResult);
             }
             else
