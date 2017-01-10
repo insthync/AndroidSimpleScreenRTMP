@@ -118,16 +118,12 @@ public class ScreenRecorder extends Thread {
             startTime = mBufferInfo.presentationTimeUs / 1000;
 
         if ((mBufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
-            // The codec config data was pulled out and fed to the muxer when we got
-            // the INFO_OUTPUT_FORMAT_CHANGED status.
-            // Ignore it.
-            Log.d(TAG, "ignoring BUFFER_FLAG_CODEC_CONFIG");
-
-            encodedData.position(0);
-            encodedData.limit(mBufferInfo.size);
+            // Pulling codec config data
+            encodedData.position(mBufferInfo.offset);
+            encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
             Log.i(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
 
-            byte[] bytes = new byte[mBufferInfo.size];
+            byte[] bytes = new byte[encodedData.remaining()];
             encodedData.get(bytes);
 
             int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, 0);
@@ -164,9 +160,9 @@ public class ScreenRecorder extends Thread {
 
         mFormat = MediaFormat.createVideoFormat(MIME_TYPE, mWidth, mHeight);
         mFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        mFormat.setInteger(MediaFormat.KEY_BIT_RATE, mBitRate);
         mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
         mFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, IFRAME_INTERVAL);
+        mFormat.setInteger(MediaFormat.KEY_BIT_RATE, mBitRate);
 
         Log.d(TAG, "created video format: " + mFormat);
         mEncoder = MediaCodec.createEncoderByType(MIME_TYPE);

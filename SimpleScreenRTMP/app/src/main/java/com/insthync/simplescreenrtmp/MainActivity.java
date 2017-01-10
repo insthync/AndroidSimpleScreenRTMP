@@ -36,7 +36,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         // video size
         final int width = 640;
         final int height = 480;
-        final int bitrate = 6000000;
+        final int bitrate = 1000000;
         mRecorder = new ScreenRecorder(width, height, bitrate, 1, mediaProjection);
         mRecorder.start();
         mButton.setText("Stop Recorder");
