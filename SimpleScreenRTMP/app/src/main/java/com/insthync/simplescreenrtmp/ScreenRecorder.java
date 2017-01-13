@@ -27,7 +27,7 @@ public class ScreenRecorder extends Thread {
     private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
     private static final int FRAME_RATE = 15; // 15 fps
     private static final int IFRAME_INTERVAL = 10; // 10 seconds between I-frames
-    private static final int TIMEOUT_US = 1000000;  // 1 seconds
+    private static final int TIMEOUT_US = 10000;
     // RTMP_URL Constraints
     private static final String RTMP_URL = "rtmp://188.166.191.129/live/test";
 
@@ -41,6 +41,8 @@ public class ScreenRecorder extends Thread {
     private RTMPMuxer mRTMPMuxer;
     private long startTime;
     private int currentFrame;
+    private boolean isSetHeader;
+    private byte[] lastFrameData;
 
     public ScreenRecorder(int width, int height, int bitrate, int dpi, MediaProjection mp) {
         super(TAG);
@@ -69,6 +71,7 @@ public class ScreenRecorder extends Thread {
         try {
             startTime = 0;
             currentFrame = 0;
+            isSetHeader = false;
             try {
                 prepareEncoder();
             } catch (IOException e) {
@@ -92,73 +95,60 @@ public class ScreenRecorder extends Thread {
 
     private void recordVirtualDisplay() {
         while (!mQuit.get()) {
-            int index = mEncoder.dequeueOutputBuffer(mBufferInfo, -1);
+
+            int index = mEncoder.dequeueOutputBuffer(mBufferInfo, TIMEOUT_US);
+
+            if (startTime == 0)
+                startTime = (System.currentTimeMillis());
+
+            int timestamp = (int) ((System.currentTimeMillis()) - startTime);
             Log.i(TAG, "dequeue output buffer index=" + index);
             if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                 Log.d(TAG, "Format changed " + mEncoder.getOutputFormat());
-            } else if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                Log.d(TAG, "retrieving buffers time out!");
-                try {
-                    // wait 10ms
-                    Thread.sleep(10);
-                } catch (InterruptedException e) {
-                }
             } else if (index >= 0) {
-                encodeToVideoTrack(index);
+                ByteBuffer encodedData = mEncoder.getOutputBuffer(index);
+                encodedData.position(mBufferInfo.offset);
+                encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
+                Log.i(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
+
+                byte[] bytes = new byte[encodedData.remaining()];
+                encodedData.get(bytes);
+
+                encodeToVideoTrack(index, timestamp, bytes);
 
                 mEncoder.releaseOutputBuffer(index, false);
+            } else {
+                if (isSetHeader)
+                    writeToMuxer(false, timestamp, lastFrameData);
             }
             currentFrame++;
         }
     }
 
-    private void encodeToVideoTrack(int index) {
-        ByteBuffer encodedData = mEncoder.getOutputBuffer(index);
+    private void encodeToVideoTrack(int index, int timestamp, byte[] bytes) {
 
-        int rtmpConnectionState = mRTMPMuxer != null ? mRTMPMuxer.isConnected() : 0;
-
-        if (startTime == 0)
-            startTime = mBufferInfo.presentationTimeUs / 1000;
-
-        //int timestamp = (int) ((mBufferInfo.presentationTimeUs / 1000) - startTime);
-        int timestamp = currentFrame * (1000 / FRAME_RATE);
 
         if ((mBufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
             // Pulling codec config data
-            encodedData.position(mBufferInfo.offset);
-            encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
-            Log.i(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
-
-            byte[] bytes = new byte[encodedData.remaining()];
-            encodedData.get(bytes);
-
-            int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, 0);
-            Log.d(TAG, "RTMP_URL write format result: " + writeResult);
-
+            if (!isSetHeader) {
+                writeToMuxer(true, timestamp, bytes);
+                isSetHeader = true;
+            }
             mBufferInfo.size = 0;
         }
 
-        if (mBufferInfo.size == 0) {
-            Log.d(TAG, "info.size == 0, drop it.");
-            encodedData = null;
-        } else {
-            Log.d(TAG, "got buffer, info: size=" + mBufferInfo.size
-                    + ", presentationTimeUs=" + mBufferInfo.presentationTimeUs
-                    + ", offset=" + mBufferInfo.offset);
+        if (mBufferInfo.size > 0) {
+            writeToMuxer(false, timestamp, bytes);
         }
+    }
 
-        if (encodedData != null) {
-            encodedData.position(mBufferInfo.offset);
-            encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
-            Log.i(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
-
-            byte[] bytes = new byte[encodedData.remaining()];
-            encodedData.get(bytes);
-
-            Log.d(TAG, "RTMP connection state: " + rtmpConnectionState + " timestamp: " + timestamp + " byte[] length: " + bytes.length);
-            int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, timestamp);
-            Log.d(TAG, "RTMP write data result: " + writeResult);
-        }
+    private void writeToMuxer(boolean isHeader, int timestamp, byte[] bytes) {
+        int rtmpConnectionState = mRTMPMuxer != null ? mRTMPMuxer.isConnected() : 0;
+        Log.d(TAG, "RTMP connection state: " + rtmpConnectionState + " timestamp: " + timestamp + " byte[] length: " + bytes.length);
+        int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, timestamp);
+        Log.d(TAG, "RTMP write data result: " + writeResult + " is header: " + isHeader);
+        if (!isHeader)
+            lastFrameData = bytes;
     }
 
     private void prepareEncoder() throws IOException {
