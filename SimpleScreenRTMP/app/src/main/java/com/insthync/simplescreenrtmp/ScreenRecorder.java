@@ -25,8 +25,8 @@ public class ScreenRecorder extends Thread {
     private MediaProjection mMediaProjection;
     // parameters for the encoder
     private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
-    private static final int FRAME_RATE = 15; // 15 fps
-    private static final int IFRAME_INTERVAL = 10; // 10 seconds between I-frames
+    private static final int FRAME_RATE = 30; // 30 fps
+    private static final int IFRAME_INTERVAL = 1; // 10 seconds between I-frames
     private static final int TIMEOUT_US = 10000;
     // RTMP_URL Constraints
     private static final String RTMP_URL = "rtmp://188.166.191.129/live/test";
@@ -40,9 +40,8 @@ public class ScreenRecorder extends Thread {
     // RTMP_URL
     private RTMPMuxer mRTMPMuxer;
     private long startTime;
-    private int currentFrame;
+    private long tryingAgainTime;
     private boolean isSetHeader;
-    private byte[] lastFrameData;
 
     public ScreenRecorder(int width, int height, int bitrate, int dpi, MediaProjection mp) {
         super(TAG);
@@ -52,7 +51,6 @@ public class ScreenRecorder extends Thread {
         mDpi = dpi;
         mMediaProjection = mp;
     }
-
 
     public ScreenRecorder(MediaProjection mp) {
         // 480p 2Mbps
@@ -70,7 +68,7 @@ public class ScreenRecorder extends Thread {
     public void run() {
         try {
             startTime = 0;
-            currentFrame = 0;
+            tryingAgainTime = 0;
             isSetHeader = false;
             try {
                 prepareEncoder();
@@ -99,29 +97,32 @@ public class ScreenRecorder extends Thread {
             int index = mEncoder.dequeueOutputBuffer(mBufferInfo, TIMEOUT_US);
 
             if (startTime == 0)
-                startTime = (System.currentTimeMillis());
+                startTime = System.currentTimeMillis();
 
-            int timestamp = (int) ((System.currentTimeMillis()) - startTime);
-            Log.i(TAG, "dequeue output buffer index=" + index);
+            int timestamp = (int) (System.currentTimeMillis() - startTime);
+            //Log.d(TAG, "dequeue output buffer index=" + index);
             if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                 Log.d(TAG, "Format changed " + mEncoder.getOutputFormat());
+            } else if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                if (tryingAgainTime == 0)
+                    tryingAgainTime = System.currentTimeMillis();
             } else if (index >= 0) {
+                if (tryingAgainTime != 0) {
+                    long tryAgainAfterTime = System.currentTimeMillis() - tryingAgainTime;
+                    Log.d(TAG, "Tried again after " + tryAgainAfterTime +" ms");
+                    tryingAgainTime = 0;
+                }
                 ByteBuffer encodedData = mEncoder.getOutputBuffer(index);
                 encodedData.position(mBufferInfo.offset);
                 encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
-                Log.i(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
+                Log.d(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
 
                 byte[] bytes = new byte[encodedData.remaining()];
                 encodedData.get(bytes);
 
                 encodeToVideoTrack(index, timestamp, bytes);
-
                 mEncoder.releaseOutputBuffer(index, false);
-            } else {
-                if (isSetHeader)
-                    writeToMuxer(false, timestamp, lastFrameData);
             }
-            currentFrame++;
         }
     }
 
@@ -147,20 +148,15 @@ public class ScreenRecorder extends Thread {
         Log.d(TAG, "RTMP connection state: " + rtmpConnectionState + " timestamp: " + timestamp + " byte[] length: " + bytes.length);
         int writeResult = mRTMPMuxer.writeVideo(bytes, 0, bytes.length, timestamp);
         Log.d(TAG, "RTMP write data result: " + writeResult + " is header: " + isHeader);
-        if (!isHeader)
-            lastFrameData = bytes;
     }
 
     private void prepareEncoder() throws IOException {
-
         mFormat = MediaFormat.createVideoFormat(MIME_TYPE, mWidth, mHeight);
         mFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         mFormat.setInteger(MediaFormat.KEY_BIT_RATE, mBitRate);
         mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
+        mFormat.setInteger(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1000000 / FRAME_RATE);
         mFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, IFRAME_INTERVAL);
-        mFormat.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline);
-        mFormat.setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel31);
-        mFormat.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR);
 
         Log.d(TAG, "created video format: " + mFormat);
         mEncoder = MediaCodec.createEncoderByType(MIME_TYPE);
