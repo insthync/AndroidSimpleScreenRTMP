@@ -25,8 +25,8 @@ public class ScreenRecorder extends Thread {
     private MediaProjection mMediaProjection;
     // parameters for the encoder
     private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
-    private static final int FRAME_RATE = 30; // 30 fps
-    private static final int IFRAME_INTERVAL = 1; // 10 seconds between I-frames
+    private static final int FRAME_RATE = 60; // 60 fps
+    private static final int IFRAME_INTERVAL = 1; // 1 seconds between I-frames
     private static final int TIMEOUT_US = 10000;
     // RTMP_URL Constraints
     private static final String RTMP_URL = "rtmp://188.166.191.129/live/test";
@@ -106,8 +106,9 @@ public class ScreenRecorder extends Thread {
             } else if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
                 if (tryingAgainTime == 0)
                     tryingAgainTime = System.currentTimeMillis();
+                //Log.d(TAG, "Contents are not ready, trying again...");
             } else if (index >= 0) {
-                if (tryingAgainTime != 0) {
+                if (tryingAgainTime > 0) {
                     long tryAgainAfterTime = System.currentTimeMillis() - tryingAgainTime;
                     Log.d(TAG, "Tried again after " + tryAgainAfterTime +" ms");
                     tryingAgainTime = 0;
@@ -115,7 +116,6 @@ public class ScreenRecorder extends Thread {
                 ByteBuffer encodedData = mEncoder.getOutputBuffer(index);
                 encodedData.position(mBufferInfo.offset);
                 encodedData.limit(mBufferInfo.offset + mBufferInfo.size);
-                Log.d(TAG, "sent " + mBufferInfo.size + " bytes to muxer...");
 
                 byte[] bytes = new byte[encodedData.remaining()];
                 encodedData.get(bytes);
@@ -155,8 +155,8 @@ public class ScreenRecorder extends Thread {
         mFormat.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         mFormat.setInteger(MediaFormat.KEY_BIT_RATE, mBitRate);
         mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, FRAME_RATE);
-        mFormat.setInteger(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1000000 / FRAME_RATE);
         mFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, IFRAME_INTERVAL);
+        mFormat.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 1000000 / FRAME_RATE);
 
         Log.d(TAG, "created video format: " + mFormat);
         mEncoder = MediaCodec.createEncoderByType(MIME_TYPE);
