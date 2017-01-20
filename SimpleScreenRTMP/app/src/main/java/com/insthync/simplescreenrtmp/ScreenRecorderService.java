@@ -91,8 +91,8 @@ public class ScreenRecorderService extends Service {
     private MediaCodec mVideoEncoder;
     private MediaCodec.BufferInfo mVideoBufferInfo;
 
-    private AudioRecord audioRecord;
-    private byte[] audioBuffer;
+    private AudioRecord mAudioRecord;
+    private byte[] mAudioBuffer;
     private MediaCodec mAudioEncoder;
     private MediaCodec.BufferInfo mAudioBufferInfo;
 
@@ -287,15 +287,15 @@ public class ScreenRecorderService extends Service {
 
     private void prepareAudioEncoder() {
         int minBufferSize = AudioRecord.getMinBufferSize(mSelectedAudioSampleRate, AUDIO_CHANNEL_CONFIG, AUDIO_RECORD_FORMAT);
-        audioRecord = new AudioRecord(mSelectedAudioRecordSource, mSelectedAudioSampleRate, AUDIO_CHANNEL_CONFIG, AUDIO_RECORD_FORMAT, minBufferSize * 5);
-        audioBuffer = new byte[mSelectedAudioSampleRate / 10 * 2];
+        mAudioRecord = new AudioRecord(mSelectedAudioRecordSource, mSelectedAudioSampleRate, AUDIO_CHANNEL_CONFIG, AUDIO_RECORD_FORMAT, minBufferSize * 5);
+        mAudioBuffer = new byte[mSelectedAudioSampleRate / 10 * 2];
 
-        if (AudioRecord.STATE_INITIALIZED != audioRecord.getState()) {
-            Log.e(TAG, "audioRecord.getState()!=AudioRecord.STATE_INITIALIZED!");
+        if (AudioRecord.STATE_INITIALIZED != mAudioRecord.getState()) {
+            Log.e(TAG, "mAudioRecord.getState()!=AudioRecord.STATE_INITIALIZED!");
             return;
         }
 
-        audioRecord.startRecording();
+        mAudioRecord.startRecording();
         recordAudio();
 
         mAudioBufferInfo = new MediaCodec.BufferInfo();
@@ -320,14 +320,16 @@ public class ScreenRecorderService extends Service {
 
         if (mAudioEncoder != null) {
             int timestamp = (int) (System.currentTimeMillis() - mStartTime);
-            int size = audioRecord.read(audioBuffer, 0, audioBuffer.length);
+
+            // Read audio data from recorder then write to encoder
+            int size = mAudioRecord.read(mAudioBuffer, 0, mAudioBuffer.length);
             if (size > 0) {
                 int index = mAudioEncoder.dequeueInputBuffer(-1);
                 if (index >= 0) {
-                    ByteBuffer dstAudioEncoderIBuffer = mAudioEncoder.getInputBuffer(index);
-                    dstAudioEncoderIBuffer.position(0);
-                    dstAudioEncoderIBuffer.put(audioBuffer, 0, audioBuffer.length);
-                    mAudioEncoder.queueInputBuffer(index, 0, audioBuffer.length, timestamp, 0);
+                    ByteBuffer inputBuffer = mAudioEncoder.getInputBuffer(index);
+                    inputBuffer.position(0);
+                    inputBuffer.put(mAudioBuffer, 0, mAudioBuffer.length);
+                    mAudioEncoder.queueInputBuffer(index, 0, mAudioBuffer.length, timestamp, 0);
                 }
             }
         }
@@ -478,10 +480,10 @@ public class ScreenRecorderService extends Service {
             mVirtualDisplay.release();
             mVirtualDisplay = null;
         }
-        if (audioRecord != null) {
-            audioRecord.stop();
-            audioRecord.release();
-            audioRecord = null;
+        if (mAudioRecord != null) {
+            mAudioRecord.stop();
+            mAudioRecord.release();
+            mAudioRecord = null;
         }
         mVideoBufferInfo = null;
     }

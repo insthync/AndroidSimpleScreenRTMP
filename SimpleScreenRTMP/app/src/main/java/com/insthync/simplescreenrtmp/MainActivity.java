@@ -1,10 +1,13 @@
 package com.insthync.simplescreenrtmp;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Bundle;
+import android.support.v4.app.ActivityCompat;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -12,11 +15,21 @@ import android.widget.Toast;
 
 public class MainActivity extends Activity implements View.OnClickListener {
     private static final int REQUEST_CODE = 1;
+    private static final int REQUEST_STREAM = 2;
+    private static String[] PERMISSIONS_STREAM = {
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.CAPTURE_VIDEO_OUTPUT,
+            Manifest.permission.CAPTURE_AUDIO_OUTPUT,
+    };
     private MediaProjectionManager mMediaProjectionManager;
     private int mCreateScreenCaptureResultCode;
     private Intent mCreateScreenCaptureResultData;
-    private ScreenRecorder mRecorder;
+    // Now, Using service
+    //private ScreenRecorder mRecorder;
     private Button mButton;
+    boolean authorized = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,6 +39,37 @@ public class MainActivity extends Activity implements View.OnClickListener {
         mButton.setOnClickListener(this);
         //noinspection ResourceType
         mMediaProjectionManager = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        verifyPermissions();
+    }
+
+    public void verifyPermissions() {
+        for (String permission : PERMISSIONS_STREAM) {
+            int permissionResult = ActivityCompat.checkSelfPermission(MainActivity.this, permission);
+            if (permissionResult != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                        MainActivity.this,
+                        PERMISSIONS_STREAM,
+                        REQUEST_STREAM
+                );
+                authorized = false;
+                return;
+            }
+        }
+        authorized = true;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_STREAM) {
+            for (int grantResult : grantResults) {
+                if (grantResult != PackageManager.PERMISSION_GRANTED) {
+                    authorized = false;
+                    return;
+                }
+            }
+            authorized = true;
+        }
     }
 
     @Override
