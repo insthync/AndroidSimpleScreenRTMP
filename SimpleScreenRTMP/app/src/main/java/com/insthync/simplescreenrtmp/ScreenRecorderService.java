@@ -222,7 +222,9 @@ public class ScreenRecorderService extends Service {
     }
 
     private int getTimestamp() {
-        return (int) (System.currentTimeMillis() - mStartTime);
+        if (mStartTime == 0)
+            mStartTime = mVideoBufferInfo.presentationTimeUs / 1000;
+        return (int) (mVideoBufferInfo.presentationTimeUs / 1000 - mStartTime);
     }
 
     private boolean startScreenCapture() {
@@ -243,7 +245,7 @@ public class ScreenRecorderService extends Service {
     private void startRecording() {
         Log.d(TAG, "startRecording");
 
-        mStartTime = System.currentTimeMillis();
+        mStartTime = 0;
         mVideoTryingAgainTime = 0;
         mIsSetVideoHeader = false;
 
@@ -334,7 +336,7 @@ public class ScreenRecorderService extends Service {
                     ByteBuffer inputBuffer = mAudioEncoder.getInputBuffer(index);
                     inputBuffer.position(0);
                     inputBuffer.put(mAudioBuffer, 0, mAudioBuffer.length);
-                    mAudioEncoder.queueInputBuffer(index, 0, mAudioBuffer.length, timestamp, 0);
+                    mAudioEncoder.queueInputBuffer(index, 0, mAudioBuffer.length, timestamp * 1000, 0);
                 }
             }
         }
