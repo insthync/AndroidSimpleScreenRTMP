@@ -30,7 +30,10 @@
             </intent-filter>
         </activity>
 
-        <service android:name=".ScreenRecorderService" />
+        <service android:name=".ScreenRecorderService"
+            android:process=":screen_record"
+            android:enabled="true"
+            android:exported="true" />
     </application>
 
 </manifest>

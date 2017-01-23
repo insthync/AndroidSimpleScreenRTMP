@@ -35,7 +35,7 @@ public class ScreenRecorderService extends Service {
     // Default Video Record Setting
     public static final int DEFAULT_SCREEN_WIDTH = 640;
     public static final int DEFAULT_SCREEN_HEIGHT = 480;
-    public static final int DEFAULT_SCREEN_DPI = 1;
+    public static final int DEFAULT_SCREEN_DPI = 480;
     public static final int DEFAULT_VIDEO_BITRATE = 1024 * 1000;
     public static final int DEFAULT_VIDEO_FPS = 25;
     // Video Record Setting
@@ -259,18 +259,21 @@ public class ScreenRecorderService extends Service {
                 mSelectedVideoHeight, mSelectedVideoDpi, 0 /* flags */, mInputSurface,
                 null /* callback */, null /* handler */);
 
+        int audioRecoderSliceSize = mSelectedAudioSampleRate / 10;
         int minBufferSize = AudioRecord.getMinBufferSize(mSelectedAudioSampleRate, AUDIO_CHANNEL_CONFIG, AUDIO_RECORD_FORMAT);
         mAudioRecord = new AudioRecord(mSelectedAudioRecordSource, mSelectedAudioSampleRate, AUDIO_CHANNEL_CONFIG, AUDIO_RECORD_FORMAT, minBufferSize * 5);
-        mAudioBuffer = new byte[mSelectedAudioSampleRate / 10 * 2];
+        mAudioBuffer = new byte[audioRecoderSliceSize * 2];
 
         // Start the encoders
-        if (mVirtualDisplay != null && mVideoEncoder != null)
+        if (mVideoEncoder != null)
             drainVideoEncoder();
 
-        if (mAudioRecord != null && mAudioRecord.getState() == AudioRecord.STATE_INITIALIZED && mAudioEncoder != null) {
-            mAudioRecord.startRecording();
-            recordAudio();
-            drainAudioEncoder();
+        if (mAudioRecord.getState() == AudioRecord.STATE_INITIALIZED && mAudioRecord.setPositionNotificationPeriod(audioRecoderSliceSize) == AudioRecord.SUCCESS) {
+            if (mAudioEncoder != null) {
+                mAudioRecord.startRecording();
+                recordAudio();
+                drainAudioEncoder();
+            }
         }
     }
 
