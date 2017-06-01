@@ -35,9 +35,9 @@ public class ScreenRecorderService extends Service {
     // Default Video Record Setting
     public static final int DEFAULT_SCREEN_WIDTH = 640;
     public static final int DEFAULT_SCREEN_HEIGHT = 480;
-    public static final int DEFAULT_SCREEN_DPI = 480;
-    public static final int DEFAULT_VIDEO_BITRATE = 1024 * 1000;
-    public static final int DEFAULT_VIDEO_FPS = 25;
+    public static final int DEFAULT_SCREEN_DPI = 240;
+    public static final int DEFAULT_VIDEO_BITRATE = 1024 * 500;
+    public static final int DEFAULT_VIDEO_FPS = 15;
     // Video Record Setting
     private static final String VIDEO_MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_AVC;
     private static final int VIDEO_IFRAME_INTERVAL = 1; // 1 seconds between I-frames

@@ -25,7 +25,7 @@ public class ScreenRecorder extends Thread {
     private MediaProjection mMediaProjection;
     // parameters for the encoder
     private static final String MIME_TYPE = "video/avc"; // H.264 Advanced Video Coding
-    private static final int FRAME_RATE = 60; // 60 fps
+    private static final int FRAME_RATE = 15;
     private static final int IFRAME_INTERVAL = 1; // 1 seconds between I-frames
     private static final int TIMEOUT_US = 10000;
     // RTMP_URL Constraints
