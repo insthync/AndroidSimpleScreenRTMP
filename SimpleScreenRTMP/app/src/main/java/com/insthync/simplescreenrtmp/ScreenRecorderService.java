@@ -98,14 +98,12 @@ public class ScreenRecorderService extends Service {
 
     private RTMPMuxer mRTMPMuxer;
     private long mStartTime;
-    private long mVideoTryingAgainTime;
     private boolean mIsSetVideoHeader;
     private boolean mIsSetAudioHeader;
 
     private IntentFilter mBroadcastIntentFilter;
     private Handler mDrainVideoEncoderHandler = new Handler();
     private Handler mDrainAudioEncoderHandler = new Handler();
-    private Handler mRecordAudioHandler = new Handler();
 
     private Runnable mDrainVideoEncoderRunnable = new Runnable() {
         @Override
@@ -117,14 +115,7 @@ public class ScreenRecorderService extends Service {
     private Runnable mDrainAudioEncoderRunnable = new Runnable() {
         @Override
         public void run() {
-            drainAudioEncoder();
-        }
-    };
-
-    private Runnable mRecordAudioRunnable = new Runnable() {
-        @Override
-        public void run() {
-            recordAudio();
+            recordAndDrainAudioEncoder();
         }
     };
 
@@ -223,8 +214,8 @@ public class ScreenRecorderService extends Service {
 
     private int getTimestamp() {
         if (mStartTime == 0)
-            mStartTime = mVideoBufferInfo.presentationTimeUs / 1000;
-        return (int) (mVideoBufferInfo.presentationTimeUs / 1000 - mStartTime);
+            mStartTime = System.currentTimeMillis();
+        return (int) (System.currentTimeMillis() - mStartTime);
     }
 
     private boolean startScreenCapture() {
@@ -246,7 +237,6 @@ public class ScreenRecorderService extends Service {
         Log.d(TAG, "startRecording");
 
         mStartTime = 0;
-        mVideoTryingAgainTime = 0;
         mIsSetVideoHeader = false;
 
         prepareVideoEncoder();
@@ -273,8 +263,7 @@ public class ScreenRecorderService extends Service {
         if (mAudioRecord.getState() == AudioRecord.STATE_INITIALIZED && mAudioRecord.setPositionNotificationPeriod(audioRecoderSliceSize) == AudioRecord.SUCCESS) {
             if (mAudioEncoder != null) {
                 mAudioRecord.startRecording();
-                recordAudio();
-                drainAudioEncoder();
+                recordAndDrainAudioEncoder();
             }
         }
     }
@@ -323,49 +312,18 @@ public class ScreenRecorderService extends Service {
         }
     }
 
-    private boolean recordAudio() {
-        mRecordAudioHandler.removeCallbacks(mRecordAudioRunnable);
-
-        if (mAudioEncoder != null) {
-            int timestamp = getTimestamp();
-            // Read audio data from recorder then write to encoder
-            int size = mAudioRecord.read(mAudioBuffer, 0, mAudioBuffer.length);
-            if (size > 0) {
-                int index = mAudioEncoder.dequeueInputBuffer(-1);
-                if (index >= 0) {
-                    ByteBuffer inputBuffer = mAudioEncoder.getInputBuffer(index);
-                    inputBuffer.position(0);
-                    inputBuffer.put(mAudioBuffer, 0, mAudioBuffer.length);
-                    mAudioEncoder.queueInputBuffer(index, 0, mAudioBuffer.length, timestamp * 1000, 0);
-                }
-            }
-        }
-
-        mRecordAudioHandler.post(mRecordAudioRunnable);
-        return true;
-    }
-
     private boolean drainVideoEncoder() {
         mDrainVideoEncoderHandler.removeCallbacks(mDrainVideoEncoderRunnable);
 
         if (mVideoEncoder != null) {
-            while (true) {
                 int timestamp = getTimestamp();
                 int index = mVideoEncoder.dequeueOutputBuffer(mVideoBufferInfo, VIDEO_TIMEOUT_US);
 
                 if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     Log.d(TAG, "Video Format changed " + mVideoEncoder.getOutputFormat());
                 } else if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                    if (mVideoTryingAgainTime == 0)
-                        mVideoTryingAgainTime = System.currentTimeMillis();
                     //Log.d(TAG, "Contents are not ready, trying again...");
-                    break;
                 } else if (index >= 0) {
-                    if (mVideoTryingAgainTime > 0) {
-                        long tryAgainAfterTime = System.currentTimeMillis() - mVideoTryingAgainTime;
-                        Log.d(TAG, "Tried again after " + tryAgainAfterTime + " ms");
-                        mVideoTryingAgainTime = 0;
-                    }
                     ByteBuffer encodedData = mVideoEncoder.getOutputBuffer(index);
                     encodedData.position(mVideoBufferInfo.offset);
                     encodedData.limit(mVideoBufferInfo.offset + mVideoBufferInfo.size);
@@ -388,25 +346,36 @@ public class ScreenRecorderService extends Service {
 
                     mVideoEncoder.releaseOutputBuffer(index, false);
                 }
-            }
         }
 
         mDrainVideoEncoderHandler.post(mDrainVideoEncoderRunnable);
         return true;
     }
 
-    private boolean drainAudioEncoder() {
+    private boolean recordAndDrainAudioEncoder() {
         mDrainAudioEncoderHandler.removeCallbacks(mDrainAudioEncoderRunnable);
 
         if (mAudioEncoder != null) {
-            while (true) {
                 int timestamp = getTimestamp();
+
+                // Read audio data from recorder then write to encoder
+                int size = mAudioRecord.read(mAudioBuffer, 0, mAudioBuffer.length);
+                if (size > 0) {
+                    int index = mAudioEncoder.dequeueInputBuffer(-1);
+                    if (index >= 0) {
+                        ByteBuffer inputBuffer = mAudioEncoder.getInputBuffer(index);
+                        inputBuffer.position(0);
+                        inputBuffer.put(mAudioBuffer, 0, mAudioBuffer.length);
+                        mAudioEncoder.queueInputBuffer(index, 0, mAudioBuffer.length, timestamp * 1000, 0);
+                    }
+                }
+
+                // Read audio from encoder
                 int index = mAudioEncoder.dequeueOutputBuffer(mAudioBufferInfo, AUDIO_TIMEOUT_US);
 
                 if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
                     Log.d(TAG, "Audio Format changed " + mAudioEncoder.getOutputFormat());
                 } else if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                    break;
                 } else if (index >= 0) {
                     ByteBuffer encodedData = mAudioEncoder.getOutputBuffer(index);
                     encodedData.position(mAudioBufferInfo.offset);
@@ -430,7 +399,6 @@ public class ScreenRecorderService extends Service {
 
                     mAudioEncoder.releaseOutputBuffer(index, false);
                 }
-            }
         }
 
         mDrainAudioEncoderHandler.post(mDrainAudioEncoderRunnable);
@@ -459,7 +427,6 @@ public class ScreenRecorderService extends Service {
     private void releaseEncoders() {
         mDrainVideoEncoderHandler.removeCallbacks(mDrainVideoEncoderRunnable);
         mDrainAudioEncoderHandler.removeCallbacks(mDrainAudioEncoderRunnable);
-        mRecordAudioHandler.removeCallbacks(mRecordAudioRunnable);
 
         if (mRTMPMuxer != null) {
             mRTMPMuxer.close();
